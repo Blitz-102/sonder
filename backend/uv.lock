@@ -1122,6 +1122,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pydantic-settings" },
     { name = "rapidfuzz" },
+    { name = "scipy" },
 ]
 
 [package.optional-dependencies]
@@ -1147,6 +1148,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.1" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "rapidfuzz", specifier = ">=3.10" },
+    { name = "scipy", specifier = ">=1.14" },
     { name = "torch", marker = "extra == 'ml'", specifier = ">=2.8", index = "https://download.pytorch.org/whl/cu134", conflict = { package = "sonder", extra = "ml" } },
     { name = "transformers", marker = "extra == 'ml'", specifier = ">=5.0" },
 ]

@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -67,3 +68,63 @@ def test_missing_ffmpeg_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(FfmpegNotFoundError, match="winget install Gyan.FFmpeg"):
         load_audio("x.wav", 16000)
+
+
+def two_tone_stereo(sr: int) -> np.ndarray:
+    return np.stack([sine(sr, freq=440.0), sine(sr, freq=1000.0)], axis=1)
+
+
+def dominant_freq(x: np.ndarray, sr: int) -> float:
+    spectrum = np.abs(np.fft.rfft(x))
+    return float(np.fft.rfftfreq(x.size, 1 / sr)[int(np.argmax(spectrum))])
+
+
+@needs_ffmpeg
+def test_stereo_decode_shape_and_channels(tmp_path: Path) -> None:
+    path = tmp_path / "lr.wav"
+    sf.write(path, two_tone_stereo(44100), 44100)
+    audio = load_audio(path, 44100, channels=2)
+    assert audio.shape[0] == 2
+    assert abs(audio.shape[1] - 44100) <= 200
+    assert audio.dtype == np.float32
+    assert audio.flags["C_CONTIGUOUS"]
+    assert dominant_freq(audio[0], 44100) == pytest.approx(440.0, abs=2.0)
+    assert dominant_freq(audio[1], 44100) == pytest.approx(1000.0, abs=2.0)
+
+
+@needs_ffmpeg
+def test_mono_file_with_two_channels_duplicates(tmp_path: Path) -> None:
+    path = tmp_path / "mono.wav"
+    sf.write(path, sine(44100), 44100)
+    audio = load_audio(path, 44100, channels=2)
+    assert audio.shape[0] == 2
+    np.testing.assert_array_equal(audio[0], audio[1])
+
+
+@needs_ffmpeg
+def test_channels_one_still_returns_1d(tmp_path: Path) -> None:
+    path = tmp_path / "lr.wav"
+    sf.write(path, two_tone_stereo(44100), 44100)
+    assert load_audio(path, 44100, channels=1).ndim == 1
+
+
+def test_trims_partial_frame_for_stereo(monkeypatch: pytest.MonkeyPatch) -> None:
+    frames = np.arange(10, dtype="<f4").tobytes()  # 40 bytes = 5 stereo frames
+    fake = SimpleNamespace(returncode=0, stdout=frames + b"\x00" * 4, stderr=b"")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: fake)
+    audio = load_audio("x.wav", 44100, channels=2)
+    assert audio.shape == (2, 5)
+    np.testing.assert_array_equal(audio[0], [0, 2, 4, 6, 8])
+    np.testing.assert_array_equal(audio[1], [1, 3, 5, 7, 9])
+
+
+def test_no_whole_frame_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = SimpleNamespace(returncode=0, stdout=b"\x00" * 4, stderr=b"")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: fake)
+    with pytest.raises(AudioDecodeError):
+        load_audio("x.wav", 44100, channels=2)
+
+
+def test_zero_channels_raises() -> None:
+    with pytest.raises(ValueError):
+        load_audio("x.wav", 44100, channels=0)

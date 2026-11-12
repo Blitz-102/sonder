@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     )
 
     lastfm_api_key: str | None = None
+    guitar_presence_min: float = 0.15
     data_dir: Path = Field(default=REPO_ROOT / "data", validation_alias="SONDER_DATA_DIR")
 
     @property

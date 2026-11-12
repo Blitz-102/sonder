@@ -12,8 +12,14 @@ class AudioDecodeError(RuntimeError):
     """ffmpeg could not decode the input."""
 
 
-def load_audio(path: Path | str, sr: int) -> np.ndarray:
-    """Decode any audio file to mono float32 at `sr` Hz via ffmpeg."""
+def load_audio(path: Path | str, sr: int, channels: int = 1) -> np.ndarray:
+    """Decode any audio file to float32 at `sr` Hz via ffmpeg.
+
+    `channels == 1` returns a 1-D array of shape (n,). `channels > 1` returns a C-contiguous
+    array of shape (channels, n); mono sources are duplicated across channels.
+    """
+    if channels < 1:
+        raise ValueError(f"channels must be >= 1, got {channels}")
     cmd = [
         "ffmpeg",
         "-nostdin",
@@ -25,7 +31,7 @@ def load_audio(path: Path | str, sr: int) -> np.ndarray:
         "-f",
         "f32le",
         "-ac",
-        "1",
+        str(channels),
         "-ar",
         str(sr),
         "-",
@@ -41,5 +47,11 @@ def load_audio(path: Path | str, sr: int) -> np.ndarray:
         raise AudioDecodeError(f"ffmpeg failed on {path} (exit {proc.returncode}): {stderr}")
     if not proc.stdout:
         raise AudioDecodeError(f"ffmpeg produced no audio for {path}")
-    usable = len(proc.stdout) - len(proc.stdout) % 4
-    return np.frombuffer(proc.stdout[:usable], dtype="<f4").astype(np.float32, copy=True)
+    frame_bytes = 4 * channels
+    usable = len(proc.stdout) - len(proc.stdout) % frame_bytes
+    if usable == 0:
+        raise AudioDecodeError(f"ffmpeg produced no complete audio frame for {path}")
+    data = np.frombuffer(proc.stdout[:usable], dtype="<f4").astype(np.float32, copy=True)
+    if channels == 1:
+        return data
+    return np.ascontiguousarray(data.reshape(-1, channels).T)

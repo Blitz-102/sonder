@@ -9,6 +9,7 @@ from sonder.config import REPO_ROOT, Settings, get_settings
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LASTFM_API_KEY", raising=False)
     monkeypatch.delenv("SONDER_DATA_DIR", raising=False)
+    monkeypatch.delenv("GUITAR_PRESENCE_MIN", raising=False)
     get_settings.cache_clear()
 
 
@@ -48,3 +49,12 @@ def test_ensure_dirs_creates_data_and_tmp(tmp_path: Path) -> None:
 
 def test_get_settings_is_cached() -> None:
     assert get_settings() is get_settings()
+
+
+def test_guitar_presence_min_default() -> None:
+    assert Settings(_env_file=None).guitar_presence_min == 0.15
+
+
+def test_guitar_presence_min_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GUITAR_PRESENCE_MIN", "0.3")
+    assert Settings(_env_file=None).guitar_presence_min == 0.3
