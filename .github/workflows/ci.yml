@@ -13,7 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+<<<<<<< HEAD
       - uses: uses: astral-sh/setup-uv@v10.3.3
+=======
+      - uses: astral-sh/setup-uv@v10.3.3
+>>>>>>> b8b23f99be12941a4195148bac12e20b4f594ec3
         with:
           python-version: "3.12"
           enable-cache: true
