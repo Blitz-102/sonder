@@ -29,3 +29,4 @@ class RateLimiter:
 
 DEEZER_LIMITER = RateLimiter(0.2)
 ITUNES_LIMITER = RateLimiter(3.0)
+LASTFM_LIMITER = RateLimiter(1.0)
