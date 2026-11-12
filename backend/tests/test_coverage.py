@@ -16,7 +16,7 @@ from sonder.sources.itunes import ItunesTrack
 
 def _load() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
-        "coverage_script", REPO_ROOT / "scripts" / "coverage.py"
+        "coverage_script", REPO_ROOT / "scripts" / "preview_coverage.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -217,3 +217,47 @@ def test_measure_duration_deletes_temp_file_on_failure(tmp_path: Path) -> None:
     with pytest.raises(Exception):  # noqa: B017
         cov.measure_duration("https://example.test/clip", tmp_dir=tmp_dir, http=http)
     assert list(tmp_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("url", "content_type", "expected"),
+    [
+        # Deezer: .mp3 in the path, token in the query string
+        ("https://cdn.example/p/abc.mp3?hdnea=exp=1~acl=/p/*", "audio/mpeg", ".mp3"),
+        ("https://audio.example/Music/clip.M4A", "audio/mp4", ".m4a"),
+        ("https://cdn.example/preview", "audio/mpeg; charset=binary", ".mp3"),
+        ("https://cdn.example/preview", "audio/x-m4a", ".m4a"),
+        ("https://cdn.example/preview", "", ".mp3"),
+    ],
+)
+def test_audio_suffix(url: str, content_type: str, expected: str) -> None:
+    assert cov._audio_suffix(url, {"content-type": content_type}) == expected
+
+
+def test_measure_duration_uses_a_real_suffix_for_the_temp_file(tmp_path: Path) -> None:
+    """libsndfile only recognises Deezer's MP3s (empty ID3 tag) when the file ends in .mp3."""
+    seen: list[str] = []
+
+    def fake_duration(*, path: str) -> float:
+        seen.append(Path(path).suffix)
+        return 30.0
+
+    import librosa
+
+    original = librosa.get_duration
+    librosa.get_duration = fake_duration  # type: ignore[assignment]
+    try:
+        http = httpx.Client(
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(
+                    200, content=b"x", headers={"content-type": "audio/mpeg"}
+                )
+            )
+        )
+        cov.measure_duration(
+            "https://cdn.example/p/abc.mp3?hdnea=exp=1", tmp_dir=tmp_path, http=http
+        )
+    finally:
+        librosa.get_duration = original
+    assert seen == [".mp3"]
+    assert list(tmp_path.iterdir()) == []
